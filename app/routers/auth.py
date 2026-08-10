@@ -20,7 +20,7 @@ def login(
 
     if not user or not utils.verify_password(user_credential.password, user.password):
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
+            status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid Credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
