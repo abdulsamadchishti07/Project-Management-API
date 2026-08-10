@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from .. import model, schema, utils
+from .. import model, schema, utils, oauth2
 from .. database import get_db
 
+from typing import Annotated
 
 
 router = APIRouter(
@@ -34,3 +35,24 @@ def create_user(
     db.refresh(new_user)
 
     return new_user
+
+@router.get("/me", response_model=schema.UserOut)
+def read_users_me(
+    current_user: Annotated[model.Users, Depends(oauth2.get_current_active_user)],
+):
+    return current_user
+
+
+@router.get('/{id}', status_code=status.HTTP_200_OK, response_model=schema.UserOut)
+def get_user(
+    id: int,
+    db: Session = Depends(get_db)
+):
+    user = db.query(model.Users).filter(model.Users.id == id).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail= f"user not founded {id}."
+    )
+
+    return user
