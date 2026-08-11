@@ -25,11 +25,11 @@ def create_workspace(
     db.commit()
     db.refresh(new_workspace)
 
-    # Automatically add the creator as an 'owner' member
+    # Automatically add the creator as an 'Admin' member
     member = model.WorkspaceMember(
         user_id=current_user.id,
         workspace_id=new_workspace.id,
-        role="owner"
+        role="Admin"
     )
     db.add(member)
     db.commit()
