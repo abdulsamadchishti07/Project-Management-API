@@ -28,6 +28,9 @@ class Token(BaseModel):
 class TokenData(BaseModel):
     id: int | None = None
 
+
+# WorkSpace 
+
 class WorkspaceCreate(BaseModel):
     name: str
 
@@ -43,11 +46,12 @@ class WorkspaceOut(BaseModel):
 
 class WorkspaceMemberOut(BaseModel):
     id: int
-    name: str
+    user_id: int
+    workspace_id: int
+    role: str
+    joined_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
-
-
 class WorkspaceInvitationCreate(BaseModel):
     email: EmailStr
     role: str = "member"
