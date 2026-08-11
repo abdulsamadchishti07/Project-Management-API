@@ -13,14 +13,12 @@ class UserOut(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-
 class UserCreate(BaseModel):
     email: EmailStr
     name: str
     password: str = Field(min_length=8, description="Password must be at least 8 characters")
 
     model_config = ConfigDict(from_attributes=True)
-
 
 class Token(BaseModel):
     access_token: str
@@ -29,3 +27,37 @@ class Token(BaseModel):
 
 class TokenData(BaseModel):
     id: int | None = None
+
+class WorkspaceCreate(BaseModel):
+    name: str
+
+class WorkspaceOut(BaseModel):
+    id: int
+    name: str
+    active: bool
+    created_at: datetime
+    owner_id: int
+    owner: UserOut 
+
+    model_config = ConfigDict(from_attributes=True)
+
+class WorkspaceMemberOut(BaseModel):
+    id: int
+    name: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class WorkspaceInvitationCreate(BaseModel):
+    email: EmailStr
+    role: str = "member"
+
+class WorkspaceInviteOut(BaseModel):
+    id: int
+    workspace_id: int
+    invited_email: EmailStr
+    role: str
+    status: str
+    created_at: datetime
+    invited_by: int
+    model_config = ConfigDict(from_attributes=True)
