@@ -1,9 +1,10 @@
 from typing import Annotated
 from fastapi import Depends, status, HTTPException, APIRouter, Response
-from sqlalchemy.orm import Session
 
 from .. import model, schema, oauth2
 from ..database import get_db
+
+from sqlalchemy.orm import Session
 
 router = APIRouter(
     prefix="/workspace",
