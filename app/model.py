@@ -51,3 +51,41 @@ class WorkspaceInvitation(Base):
     role = Column(String, nullable=False, server_default="member")
     status = Column(String, nullable=False, server_default="pending")
     created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text("now()"))
+
+class Project(Base):
+    __tablename__ = "projects"
+
+    id = Column(Integer, primary_key=True, nullable=False)
+    workspace_id = Column(Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String, nullable=False)
+    active = Column(Boolean, server_default="true", nullable=False)
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text("NOW()"))
+    private = Column(Boolean, server_default="false", nullable=False)
+
+    owner_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    owner = relationship("Users")
+
+
+class ProjectMember(Base):
+    __tablename__ = "project_members"
+
+    id = Column(Integer, primary_key=True, nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    role = Column(String, nullable=False, server_default="member")
+    joined_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text("now()"))
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "project_id", name="unique_project_member"),
+    )
+class ProjectInvitation(Base):
+    __tablename__ = "project_invitations"
+
+    id = Column(Integer, primary_key=True, nullable=False)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    invited_email = Column(String, nullable=False)
+    invited_by = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    role = Column(String, nullable=False, server_default="member")
+    status = Column(String, nullable=False, server_default="pending")
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text("now()"))
+

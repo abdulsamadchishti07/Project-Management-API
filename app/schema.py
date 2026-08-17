@@ -2,6 +2,7 @@ from datetime import datetime
 from pydantic import EmailStr, BaseModel, Field
 
 from pydantic import ConfigDict
+from typing import Optional
 
 
 class UserOut(BaseModel):
@@ -59,6 +60,37 @@ class WorkspaceInvitationCreate(BaseModel):
 class WorkspaceInviteOut(BaseModel):
     id: int
     workspace_id: int
+    invited_email: EmailStr
+    role: str
+    status: str
+    created_at: datetime
+    invited_by: int
+    model_config = ConfigDict(from_attributes=True)
+
+class ProjectCreate(BaseModel):
+    name: str
+    private: Optional[bool] = False
+
+class ProjectOut(BaseModel):
+    id: int
+    name: str
+    active: bool
+    created_at: datetime
+    private: bool
+    owner_id: int
+    owner: UserOut 
+    workspace_id: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+class ProjectInvitationCreate(BaseModel):
+    email: EmailStr
+    project_id: int
+    role: str = "member"
+
+class ProjectInviteOut(BaseModel):
+    id: int
+    project_id: int
     invited_email: EmailStr
     role: str
     status: str
