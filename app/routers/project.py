@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, status, HTTPException
+from fastapi import APIRouter, Depends, status, HTTPException, Response
 from sqlalchemy.orm import Session
 
 from .. import schema, model, oauth2
@@ -63,3 +63,60 @@ def get_project(
             detail=f"Project with id {id} not found"
         )
     return project
+
+@router.put("/{id}", response_model=schema.ProjectOut)
+def update_project(
+    id: int,
+    current_user: Annotated[model.Users, Depends(oauth2.get_current_active_user)],
+    project_data: schema.ProjectCreate,
+    db: Session = Depends(get_db)
+):
+
+    project_query = db.query(model.Project).filter(model.Project.id == id)
+    project = project_query.first()
+
+    if project is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Project with id {id} not found"
+        )
+
+    if project.owner_id != current_user.id:
+        raise HTTPException(
+            status_code= status.HTTP_403_FORBIDDEN,
+            detail=f"You are not allowed to performe this Action."
+        )
+    project_query.update(project_data.model_dump(), synchronize_session=False)
+
+    db.commit()
+    db.refresh(project)
+
+    return project
+
+
+@router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_project(
+    id: int,
+    current_user: Annotated[model.Users, Depends(oauth2.get_current_active_user)],
+    db: Session = Depends(get_db)
+):
+
+    project_query = db.query(model.Project).filter(model.Project.id == id)
+    project = project_query.first()
+
+    if project is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Project with id {id} not found"
+        )
+
+    if project.owner_id != current_user.id:
+        raise HTTPException(
+            status_code= status.HTTP_403_FORBIDDEN,
+            detail=f"You are not allowed to performe this Action."
+
+        )
+    project_query.delete( synchronize_session=False)
+    db.commit()
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

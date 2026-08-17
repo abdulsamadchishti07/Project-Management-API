@@ -4,7 +4,7 @@ from pydantic import EmailStr, BaseModel, Field
 from pydantic import ConfigDict
 from typing import Optional
 
-
+    # User
 class UserOut(BaseModel):
     id: int
     email: EmailStr
@@ -21,10 +21,10 @@ class UserCreate(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+    # Token
 class Token(BaseModel):
     access_token: str
     token_type: str
-
 
 class TokenData(BaseModel):
     id: int | None = None
@@ -67,6 +67,8 @@ class WorkspaceInviteOut(BaseModel):
     invited_by: int
     model_config = ConfigDict(from_attributes=True)
 
+    # project
+
 class ProjectCreate(BaseModel):
     name: str
     private: Optional[bool] = False
@@ -96,4 +98,5 @@ class ProjectInviteOut(BaseModel):
     status: str
     created_at: datetime
     invited_by: int
+
     model_config = ConfigDict(from_attributes=True)
