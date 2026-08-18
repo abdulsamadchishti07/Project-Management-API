@@ -1,5 +1,6 @@
 from .database import Base
 from sqlalchemy import Integer, Column, String, Boolean, text, ForeignKey, UniqueConstraint
+
 from sqlalchemy.sql.sqltypes import TIMESTAMP
 from sqlalchemy.orm import relationship
 
@@ -58,6 +59,7 @@ class Project(Base):
     id = Column(Integer, primary_key=True, nullable=False)
     workspace_id = Column(Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
     name = Column(String, nullable=False)
+    description = Column(String, nullable=False)
     active = Column(Boolean, server_default="true", nullable=False)
     created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text("NOW()"))
     private = Column(Boolean, server_default="false", nullable=False)
@@ -89,3 +91,29 @@ class ProjectInvitation(Base):
     status = Column(String, nullable=False, server_default="pending")
     created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text("now()"))
 
+class Tasks(Base):
+    __tablename__ = "tasks"
+
+    id = Column(Integer, primary_key=True, nullable=False)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    title = Column(String, nullable=False)
+    description = Column(String, nullable=True)
+    status = Column(String, server_default="pending", nullable=False)
+    priority = Column(String, server_default="medium", nullable=False)
+    assignee_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text("now()"))
+    due_date = Column(TIMESTAMP(timezone=True), nullable=True)
+
+    assignee = relationship("Users")
+
+
+class Comments(Base):
+    __tablename__ = "comments"
+
+    id = Column(Integer, primary_key=True, nullable=False)
+    task_id = Column(Integer, ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    content = Column(String, nullable=False)
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text("now()"))
+
+    user = relationship("Users")

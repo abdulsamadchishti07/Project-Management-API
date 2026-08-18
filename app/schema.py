@@ -71,11 +71,13 @@ class WorkspaceInviteOut(BaseModel):
 
 class ProjectCreate(BaseModel):
     name: str
+    description: str
     private: Optional[bool] = False
 
 class ProjectOut(BaseModel):
     id: int
     name: str
+    description: str
     active: bool
     created_at: datetime
     private: bool
@@ -98,5 +100,44 @@ class ProjectInviteOut(BaseModel):
     status: str
     created_at: datetime
     invited_by: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+# task
+
+class TasksCreate(BaseModel):
+    title: str
+    description: Optional[str] = None
+    status: Optional[str] = "pending"
+    priority: Optional[str] = "medium"
+    assignee_id: Optional[int] = None
+    due_date: Optional[datetime] = None
+
+class TasksOut(BaseModel):
+    id: int
+    project_id: int
+    title: str
+    description: Optional[str] = None
+    status: str
+    priority: str
+    assignee_id: Optional[int] = None
+    assignee: Optional[UserOut] = None
+    created_at: datetime
+    due_date: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+# comments
+
+class CommentsCreate(BaseModel):
+    content: str
+
+class CommentsOut(BaseModel):
+    id: int
+    task_id: int
+    user_id: int
+    user: Optional[UserOut] = None
+    content: str
+    created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
