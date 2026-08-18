@@ -71,13 +71,13 @@ class WorkspaceInviteOut(BaseModel):
 
 class ProjectCreate(BaseModel):
     name: str
-    description: str
+    description: Optional[str] = None
     private: Optional[bool] = False
 
 class ProjectOut(BaseModel):
     id: int
     name: str
-    description: str
+    description: Optional[str] = None
     active: bool
     created_at: datetime
     private: bool
@@ -110,6 +110,14 @@ class TasksCreate(BaseModel):
     description: Optional[str] = None
     status: Optional[str] = "pending"
     priority: Optional[str] = "medium"
+    assignee_id: Optional[int] = None
+    due_date: Optional[datetime] = None
+
+class TasksUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    status: Optional[str] = None
+    priority: Optional[str] = None
     assignee_id: Optional[int] = None
     due_date: Optional[datetime] = None
 
