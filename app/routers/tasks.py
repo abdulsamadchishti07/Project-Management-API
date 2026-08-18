@@ -14,10 +14,11 @@ router = APIRouter(
 
 
 def verify_project_access(
-        project_id: int, 
+        project_id: int,
         user_id: int, 
         db: Session
 ) -> model.Project:
+    
     project = db.query(model.Project).filter(model.Project.id == project_id).first()
     if not project:
         raise HTTPException(
@@ -51,7 +52,6 @@ def verify_project_access(
             )
 
     return project
-
 
 @router.post("/project/{project_id}", status_code=status.HTTP_201_CREATED, response_model=schema.TasksOut)
 def create_task(
@@ -114,3 +114,79 @@ def get_project_tasks(
     return tasks
 
 
+@router.get("/{id}", response_model=schema.TasksOut)
+def get_task(
+    id: int,
+    current_user: Annotated[model.Users, Depends(oauth2.get_current_active_user)],
+    db: Session = Depends(get_db)
+):
+    task = db.query(model.Tasks).filter(model.Tasks.id == id).first()
+    if not task:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Task with id {id} not found"
+        )
+
+    verify_project_access(project_id=task.project_id, user_id=current_user.id, db=db)
+
+    return task
+
+
+@router.put("/{id}", response_model=schema.TasksOut)
+def update_task(
+    id: int,
+    task_data: schema.TasksUpdate,
+    current_user: Annotated[model.Users, Depends(oauth2.get_current_active_user)],
+    db: Session = Depends(get_db)
+):
+    task_query = db.query(model.Tasks).filter(model.Tasks.id == id)
+    task = task_query.first()
+
+    if not task:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Task with id {id} not found"
+        )
+
+    verify_project_access(project_id=task.project_id, user_id=current_user.id, db=db)
+
+    # Only update the fields that were provided in the request
+    update_data = task_data.model_dump(exclude_unset=True)
+
+    if "assignee_id" in update_data and update_data["assignee_id"] is not None:
+        assignee = db.query(model.Users).filter(model.Users.id == update_data["assignee_id"]).first()
+        if not assignee:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Assignee with user id {update_data['assignee_id']} does not exist"
+            )
+
+    if update_data:
+        task_query.update(update_data, synchronize_session=False)
+        db.commit()
+        db.refresh(task)
+
+    return task
+
+
+@router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_task(
+    id: int,
+    current_user: Annotated[model.Users, Depends(oauth2.get_current_active_user)],
+    db: Session = Depends(get_db)
+):
+    task_query = db.query(model.Tasks).filter(model.Tasks.id == id)
+    task = task_query.first()
+
+    if not task:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Task with id {id} not found"
+        )
+
+    verify_project_access(project_id=task.project_id, user_id=current_user.id, db=db)
+
+    db.delete(task)
+    db.commit()
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
