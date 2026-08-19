@@ -25,6 +25,12 @@ def login(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    if not user.active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Please verify your email with the OTP code before logging in."
+        )
+
     access_token = oauth2.create_access_token(data={"user_id": user.id, "sub": str(user.id)})
 
     return {"access_token": access_token, "token_type": "bearer"}

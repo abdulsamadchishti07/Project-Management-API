@@ -21,6 +21,16 @@ class UserCreate(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+class VerifyOTP(BaseModel):
+    email: EmailStr
+    otp: str = Field(min_length=6, max_length=6, description="6-digit verification code")
+
+class ResendOTP(BaseModel):
+    email: EmailStr
+
+class MessageResponse(BaseModel):
+    message: str
+
     # Token
 class Token(BaseModel):
     access_token: str

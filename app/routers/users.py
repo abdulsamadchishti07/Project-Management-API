@@ -1,10 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Response
+from fastapi import APIRouter, Depends, HTTPException, status, Response, BackgroundTasks
 from sqlalchemy.orm import Session
 
-from .. import model, schema, utils, oauth2
+from .. import model, schema, utils, oauth2, email
 from ..database import get_db
 
 from typing import Annotated
+from datetime import datetime, timedelta, timezone
+
+import random
+
 
 
 router = APIRouter(
@@ -15,6 +19,7 @@ router = APIRouter(
 @router.post("/", status_code=status.HTTP_201_CREATED, response_model=schema.UserOut)
 def create_user(
     user: schema.UserCreate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
     existing_email = db.query(model.Users).filter(model.Users.email == user.email).first()
@@ -25,15 +30,92 @@ def create_user(
         )
 
     hashed_password = utils.hash(user.password)
-    user.password = hashed_password
 
-    new_user = model.Users(**user.model_dump())
+    # Generate 6-digit OTP with 10-minute expiry
+    otp = f"{random.randint(100000, 999999)}"
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
+
+    new_user = model.Users(
+        email=user.email,
+        name=user.name,
+        password=hashed_password,
+        active=False,
+        verification_otp=otp,
+        otp_expires_at=expires_at
+    )
 
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
 
+    # Send verification email asynchronously in the background
+    background_tasks.add_task(email.send_otp_email, new_user.email, otp)
+
     return new_user
+
+
+@router.post("/verify-otp", response_model=schema.MessageResponse)
+def verify_otp(
+    payload: schema.VerifyOTP,
+    db: Session = Depends(get_db)
+):
+    user = db.query(model.Users).filter(model.Users.email == payload.email).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User with this email does not exist."
+        )
+
+    if user.active:
+        return {"message": "Account is already verified and active. You can log in."}
+
+    if not user.verification_otp or user.verification_otp != payload.otp:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid verification code."
+        )
+
+    if user.otp_expires_at and datetime.now(timezone.utc) > user.otp_expires_at:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Verification code has expired. Please request a new one."
+        )
+
+    user.active = True
+    user.verification_otp = None
+    user.otp_expires_at = None
+    db.commit()
+
+    return {"message": "Email verified successfully! Your account is now active. You can log in."}
+
+
+@router.post("/resend-otp", response_model=schema.MessageResponse)
+def resend_otp(
+    payload: schema.ResendOTP,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    user = db.query(model.Users).filter(model.Users.email == payload.email).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User with this email does not exist."
+        )
+
+    if user.active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Account is already verified and active."
+        )
+
+    otp = f"{random.randint(100000, 999999)}"
+    user.verification_otp = otp
+    user.otp_expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
+    db.commit()
+
+    background_tasks.add_task(email.send_otp_email, user.email, otp)
+
+    return {"message": "A new verification code has been sent to your email."}
 
 
 @router.get("/me", response_model=schema.UserOut)

@@ -12,7 +12,9 @@ class Users(Base):
     email = Column(String, nullable=False, unique=True)
     name = Column(String, nullable=False)
     password = Column(String, nullable=False)
-    active = Column(Boolean, server_default="True", nullable=False)
+    active = Column(Boolean, server_default="False", nullable=False)
+    verification_otp = Column(String, nullable=True)
+    otp_expires_at = Column(TIMESTAMP(timezone=True), nullable=True)
     created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text("now()"))
 
 
