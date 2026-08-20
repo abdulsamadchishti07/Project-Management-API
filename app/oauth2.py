@@ -64,3 +64,24 @@ async def get_current_active_user(
             detail="Inactive user",
         )
     return current_user
+
+
+oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="login", auto_error=False)
+
+
+async def get_optional_current_user(
+    token: Annotated[str | None, Depends(oauth2_scheme_optional)],
+    db: Annotated[Session, Depends(get_db)],
+) -> model.Users | None:
+    """Optional authentication: returns the User if valid token is provided, or None if guest."""
+    if not token:
+        return None
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id: str | None = payload.get("sub")
+        if user_id is None:
+            return None
+        user = db.query(model.Users).filter(model.Users.id == int(user_id)).first()
+        return user if (user and user.active) else None
+    except JWTError:
+        return None

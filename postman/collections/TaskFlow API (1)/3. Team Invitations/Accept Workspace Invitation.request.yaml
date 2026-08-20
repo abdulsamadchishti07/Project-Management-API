@@ -1,0 +1,4 @@
+$kind: http-request
+url: "{{URL}}/invitations/workspace/1/accept"
+method: POST
+order: 3000

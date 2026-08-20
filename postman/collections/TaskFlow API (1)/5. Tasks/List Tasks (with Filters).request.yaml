@@ -1,0 +1,9 @@
+$kind: http-request
+url: "{{URL}}/tasks/project/1?status=pending&priority=high&limit=50&offset=0"
+method: GET
+queryParams:
+  status: pending
+  priority: high
+  limit: "50"
+  offset: "0"
+order: 2000

@@ -1,0 +1,16 @@
+$kind: http-request
+url: "{{URL}}/user/"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+        "email": "samadseven07@gmail.com",
+        "name": "Abdul Samad",
+        "password": "11111111"
+    }
+auth:
+  type: noauth
+order: 1000

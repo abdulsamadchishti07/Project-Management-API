@@ -1,0 +1,12 @@
+$kind: http-request
+url: "{{URL}}/comments/task/2"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+        "content": "I have completed the task and verified all endpoints!"
+    }
+order: 1000

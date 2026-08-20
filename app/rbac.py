@@ -34,9 +34,11 @@ def has_sufficient_role(user_role: str | Role, required_role: str | Role) -> boo
         has_sufficient_role("owner", "admin")  -> True  (Rank 4 >= Rank 3)
     """
     try:
-        user_r = Role(str(user_role).lower())
-        req_r = Role(str(required_role).lower())
-    except ValueError:
+        u_val = user_role.value if isinstance(user_role, Role) else str(user_role).lower()
+        r_val = required_role.value if isinstance(required_role, Role) else str(required_role).lower()
+        user_r = Role(u_val)
+        req_r = Role(r_val)
+    except (ValueError, AttributeError):
         return False
 
     return ROLE_HIERARCHY.get(user_r, 0) >= ROLE_HIERARCHY.get(req_r, 0)
@@ -71,21 +73,21 @@ class RequireWorkspaceRole:
                 detail=f"Workspace with id {workspace_id} not found"
             )
 
+        member = db.query(model.WorkspaceMember).filter(
+            model.WorkspaceMember.workspace_id == workspace_id,
+            model.WorkspaceMember.user_id == current_user.id
+        ).first()
+
         # If user is the creator/owner of the workspace, grant OWNER authority
         if workspace.owner_id == current_user.id:
             user_role = Role.OWNER
-        else:
-            member = db.query(model.WorkspaceMember).filter(
-                model.WorkspaceMember.workspace_id == workspace_id,
-                model.WorkspaceMember.user_id == current_user.id
-            ).first()
-
-            if not member:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="You are not a member of this workspace"
-                )
+        elif member:
             user_role = member.role
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You are not a member of this workspace"
+            )
 
         if not has_sufficient_role(user_role, self.required_role):
             raise HTTPException(

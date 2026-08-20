@@ -1,0 +1,14 @@
+$kind: http-request
+url: "{{URL}}/user/resend-otp"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+        "email": "samadseven07@gmail.com"
+    }
+auth:
+  type: noauth
+order: 3000

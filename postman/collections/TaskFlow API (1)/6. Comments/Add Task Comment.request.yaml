@@ -1,0 +1,12 @@
+$kind: http-request
+url: "{{URL}}/comments/task/1"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+        "content": "Great work on this task!"
+    }
+order: 1000

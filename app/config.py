@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     email_host_password: str
     default_from_email: str
     email_smtp_server: str = "smtp.gmail.com"
+    email_smtp_port: int = 587
     
     # Redis Settings
     redis_url: str = "redis://localhost:6379/0"

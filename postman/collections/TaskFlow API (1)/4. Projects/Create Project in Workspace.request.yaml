@@ -1,0 +1,14 @@
+$kind: http-request
+url: "{{URL}}/project/workspace/1"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+        "name": "FastAPI Engine",
+        "description": "Production REST API",
+        "private": false
+    }
+order: 1000

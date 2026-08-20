@@ -1,0 +1,12 @@
+$kind: http-request
+url: "{{URL}}/workspace/"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+        "name": "Engineering Department"
+    }
+order: 1000

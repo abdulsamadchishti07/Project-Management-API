@@ -1,0 +1,12 @@
+$kind: http-request
+url: "{{URL}}/workspace/1"
+method: PUT
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+        "name": "Core Engineering"
+    }
+order: 4000

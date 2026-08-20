@@ -1,0 +1,15 @@
+$kind: http-request
+url: "{{URL}}/tasks/project/1"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+        "title": "Implement Caching",
+        "description": "Redis cache on project list",
+        "status": "pending",
+        "priority": "high"
+    }
+order: 1000

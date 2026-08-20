@@ -1,0 +1,13 @@
+$kind: http-request
+url: "{{URL}}/project/1"
+method: PUT
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+        "name": "FastAPI Core v2",
+        "description": "Updated description"
+    }
+order: 4000

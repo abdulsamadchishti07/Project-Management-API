@@ -1,0 +1,7 @@
+$kind: http-request
+url: "{{URL}}/workspace/1/audit-logs?limit=50&offset=0"
+method: GET
+queryParams:
+  limit: "50"
+  offset: "0"
+order: 5000

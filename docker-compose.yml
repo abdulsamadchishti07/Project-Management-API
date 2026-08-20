@@ -1,0 +1,66 @@
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:16-alpine
+    container_name: taskflow_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password123
+      POSTGRES_DB: project_managment
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d project_managment"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache & Rate Limiting
+  redis:
+    image: redis:7-alpine
+    container_name: taskflow_redis
+    restart: always
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # FastAPI Web API
+  api:
+    build: .
+    container_name: taskflow_api
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://postgres:password123@db:5432/project_managment
+      REDIS_URL: redis://redis:6379/0
+      SECRET_KEY: 64H78283283873873382NCPQPS5C4D6V564v56bv756bdv57fb6n7g8g7n8bbfbd65vf4x65cr4v5rbtxerctv
+      ALGORITHM: HS256
+      ACCESS_TOKEN_EXPIRE_MINUTES: 60
+      EMAIL_HOST_USER: abdulsamadchishti07@gmail.com
+      EMAIL_HOST_PASSWORD: "gqls jkoy cjrx yblp"
+      DEFAULT_FROM_EMAIL: abdulsamadchishti07@gmail.com
+      EMAIL_SMTP_SERVER: smtp.gmail.com
+      EMAIL_SMTP_PORT: 587
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./app:/app/app
+      - ./alembic:/app/alembic
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+
+volumes:
+  postgres_data:
+  redis_data:

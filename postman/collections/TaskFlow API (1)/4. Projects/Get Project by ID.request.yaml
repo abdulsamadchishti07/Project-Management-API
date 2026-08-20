@@ -1,0 +1,4 @@
+$kind: http-request
+url: "{{URL}}/project/1"
+method: GET
+order: 3000
