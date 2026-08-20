@@ -1,15 +1,16 @@
-from fastapi import Depends, status, HTTPException, APIRouter, Response
 from typing import Annotated
+from datetime import datetime, timezone
 
+from fastapi import Depends, status, HTTPException, APIRouter, Response, Query
 from sqlalchemy.orm import Session
+
 from sqlalchemy import or_
-
 from .. import model, schema, oauth2
-from ..database import get_db
 
+from ..database import get_db
 from ..rbac import Role, RequireWorkspaceRole
 
-
+from ..audit import log_activity
 
 router = APIRouter(
     prefix="/workspace",
@@ -40,6 +41,17 @@ def create_workspace(
     db.add(member)
     db.commit()
 
+    # Log Audit Activity
+    log_activity(
+        db=db,
+        workspace_id=new_workspace.id,
+        user_id=current_user.id,
+        action="WORKSPACE_CREATED",
+        entity_type="workspace",
+        entity_id=new_workspace.id,
+        details=f"Created workspace '{new_workspace.name}'"
+    )
+
     return new_workspace
 
 
@@ -48,7 +60,7 @@ def get_my_workspaces(
     current_user: Annotated[model.Users, Depends(oauth2.get_current_active_user)],
     db: Session = Depends(get_db)
 ):
-    """Retrieves all workspaces the current user owns or is a member of."""
+    """Retrieves all active (non-deleted) workspaces the current user owns or is a member of."""
     member_workspace_ids = [
         row[0] for row in db.query(model.WorkspaceMember.workspace_id).filter(
             model.WorkspaceMember.user_id == current_user.id
@@ -56,6 +68,7 @@ def get_my_workspaces(
     ]
 
     workspaces = db.query(model.Workspace).filter(
+        model.Workspace.is_deleted == False,
         or_(
             model.Workspace.owner_id == current_user.id,
             model.Workspace.id.in_(member_workspace_ids)
@@ -72,7 +85,16 @@ def get_workspace(
     db: Session = Depends(get_db)
 ):
     """Requires at least VIEWER role in the workspace."""
-    workspace = db.query(model.Workspace).filter(model.Workspace.id == workspace_id).first()
+    workspace = db.query(model.Workspace).filter(
+        model.Workspace.id == workspace_id,
+        model.Workspace.is_deleted == False
+    ).first()
+
+    if not workspace:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Workspace with id {workspace_id} not found"
+        )
     return workspace
 
 
@@ -80,16 +102,38 @@ def get_workspace(
 def update_workspace(
     workspace_id: int,
     workspace_data: schema.WorkspaceCreate,
+    current_user: Annotated[model.Users, Depends(oauth2.get_current_active_user)],
     membership: Annotated[model.WorkspaceMember, Depends(RequireWorkspaceRole(Role.ADMIN))],
     db: Session = Depends(get_db)
 ):
     """Requires at least ADMIN or OWNER role in the workspace."""
-    workspace_query = db.query(model.Workspace).filter(model.Workspace.id == workspace_id)
+    workspace_query = db.query(model.Workspace).filter(
+        model.Workspace.id == workspace_id,
+        model.Workspace.is_deleted == False
+    )
     workspace = workspace_query.first()
 
+    if not workspace:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Workspace with id {workspace_id} not found"
+        )
+
+    old_name = workspace.name
     workspace_query.update(workspace_data.model_dump(), synchronize_session=False)
     db.commit()
     db.refresh(workspace)
+
+    # Log Audit Activity
+    log_activity(
+        db=db,
+        workspace_id=workspace_id,
+        user_id=current_user.id,
+        action="WORKSPACE_UPDATED",
+        entity_type="workspace",
+        entity_id=workspace_id,
+        details=f"Renamed workspace from '{old_name}' to '{workspace.name}'"
+    )
 
     return workspace
 
@@ -97,13 +141,51 @@ def update_workspace(
 @router.delete("/{workspace_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_workspace(
     workspace_id: int,
+    current_user: Annotated[model.Users, Depends(oauth2.get_current_active_user)],
     membership: Annotated[model.WorkspaceMember, Depends(RequireWorkspaceRole(Role.OWNER))],
     db: Session = Depends(get_db)
 ):
-    """Requires OWNER role to delete the workspace."""
-    workspace = db.query(model.Workspace).filter(model.Workspace.id == workspace_id).first()
+    """Soft deletes the workspace (Requires OWNER role)."""
+    workspace = db.query(model.Workspace).filter(
+        model.Workspace.id == workspace_id,
+        model.Workspace.is_deleted == False
+    ).first()
 
-    db.delete(workspace)
+    if not workspace:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Workspace with id {workspace_id} not found"
+        )
+
+    workspace.is_deleted = True
+    workspace.deleted_at = datetime.now(timezone.utc)
     db.commit()
 
+    # Log Audit Activity
+    log_activity(
+        db=db,
+        workspace_id=workspace_id,
+        user_id=current_user.id,
+        action="WORKSPACE_DELETED",
+        entity_type="workspace",
+        entity_id=workspace_id,
+        details=f"Soft deleted workspace '{workspace.name}'"
+    )
+
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/{workspace_id}/audit-logs", response_model=list[schema.AuditLogOut])
+def get_workspace_audit_logs(
+    workspace_id: int,
+    membership: Annotated[model.WorkspaceMember, Depends(RequireWorkspaceRole(Role.ADMIN))],
+    db: Session = Depends(get_db),
+    limit: int = Query(default=50, le=100),
+    offset: int = Query(default=0, ge=0)
+):
+    """Retrieves chronological activity logs for the workspace (Requires ADMIN or OWNER role)."""
+    logs = db.query(model.AuditLog).filter(
+        model.AuditLog.workspace_id == workspace_id
+    ).order_by(model.AuditLog.created_at.desc()).limit(limit).offset(offset).all()
+
+    return logs

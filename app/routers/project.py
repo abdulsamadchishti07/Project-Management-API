@@ -1,16 +1,17 @@
+from typing import Annotated
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, status, HTTPException, Response
-from typing import Annotated, Optional
-
 from sqlalchemy.orm import Session
+
 from sqlalchemy import or_
-
 from .. import schema, model, oauth2
+
 from ..database import get_db
-
 from ..rbac import Role, RequireWorkspaceRole, has_sufficient_role
+
 from ..redis_client import get_cached_json, set_cached_json, delete_cache_pattern
-
-
+from ..audit import log_activity
 
 router = APIRouter(
     prefix="/project",
@@ -51,6 +52,17 @@ def create_project(
     # Invalidate workspace projects cache
     delete_cache_pattern(f"projects:ws:{workspace_id}:*")
 
+    # Log Audit Activity
+    log_activity(
+        db=db,
+        workspace_id=workspace_id,
+        user_id=current_user.id,
+        action="PROJECT_CREATED",
+        entity_type="project",
+        entity_id=new_project.id,
+        details=f"Created project '{new_project.name}' (private={new_project.private})"
+    )
+
     return new_project
 
 
@@ -61,7 +73,7 @@ def get_workspace_projects(
     membership: Annotated[model.WorkspaceMember, Depends(RequireWorkspaceRole(Role.VIEWER))],
     db: Session = Depends(get_db)
 ):
-    """Requires at least VIEWER role in the workspace. Cached in Redis for blazing performance."""
+    """Requires at least VIEWER role in the workspace. Cached in Redis."""
     cache_key = f"projects:ws:{workspace_id}:user:{current_user.id}"
     cached_data = get_cached_json(cache_key)
     if cached_data is not None:
@@ -74,9 +86,10 @@ def get_workspace_projects(
         ).all()
     ]
 
-    # Return public projects OR private projects owned by user OR private projects where user is a member
+    # Return active (non-deleted) projects
     projects = db.query(model.Project).filter(
         model.Project.workspace_id == workspace_id,
+        model.Project.is_deleted == False,
         or_(
             model.Project.private == False,
             model.Project.owner_id == current_user.id,
@@ -97,7 +110,11 @@ def get_project(
     current_user: Annotated[model.Users, Depends(oauth2.get_current_active_user)],
     db: Session = Depends(get_db)
 ):
-    project = db.query(model.Project).filter(model.Project.id == id).first()
+    project = db.query(model.Project).filter(
+        model.Project.id == id,
+        model.Project.is_deleted == False
+    ).first()
+
     if project is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -142,7 +159,10 @@ def update_project(
     current_user: Annotated[model.Users, Depends(oauth2.get_current_active_user)],
     db: Session = Depends(get_db)
 ):
-    project_query = db.query(model.Project).filter(model.Project.id == id)
+    project_query = db.query(model.Project).filter(
+        model.Project.id == id,
+        model.Project.is_deleted == False
+    )
     project = project_query.first()
 
     if project is None:
@@ -167,6 +187,7 @@ def update_project(
             detail="You are not allowed to update this project"
         )
 
+    old_name = project.name
     update_dict = project_data.model_dump(exclude_unset=True)
     if update_dict:
         project_query.update(update_dict, synchronize_session=False)
@@ -175,6 +196,17 @@ def update_project(
 
         # Invalidate cache for this workspace
         delete_cache_pattern(f"projects:ws:{project.workspace_id}:*")
+
+        # Log Audit Activity
+        log_activity(
+            db=db,
+            workspace_id=project.workspace_id,
+            user_id=current_user.id,
+            action="PROJECT_UPDATED",
+            entity_type="project",
+            entity_id=project.id,
+            details=f"Updated project '{old_name}'"
+        )
 
     return project
 
@@ -185,7 +217,10 @@ def delete_project(
     current_user: Annotated[model.Users, Depends(oauth2.get_current_active_user)],
     db: Session = Depends(get_db)
 ):
-    project_query = db.query(model.Project).filter(model.Project.id == id)
+    project_query = db.query(model.Project).filter(
+        model.Project.id == id,
+        model.Project.is_deleted == False
+    )
     project = project_query.first()
 
     if project is None:
@@ -211,10 +246,25 @@ def delete_project(
         )
 
     workspace_id = project.workspace_id
-    db.delete(project)
+    project_title = project.name
+
+    # Soft Delete
+    project.is_deleted = True
+    project.deleted_at = datetime.now(timezone.utc)
     db.commit()
 
     # Invalidate cache for this workspace
     delete_cache_pattern(f"projects:ws:{workspace_id}:*")
+
+    # Log Audit Activity
+    log_activity(
+        db=db,
+        workspace_id=workspace_id,
+        user_id=current_user.id,
+        action="PROJECT_DELETED",
+        entity_type="project",
+        entity_id=id,
+        details=f"Soft deleted project '{project_title}'"
+    )
 
     return Response(status_code=status.HTTP_204_NO_CONTENT)

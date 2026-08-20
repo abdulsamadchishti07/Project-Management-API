@@ -160,3 +160,17 @@ class CommentsOut(BaseModel):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+    
+    # Audit Log
+class AuditLogOut(BaseModel):
+    id: int
+    workspace_id: int
+    user_id: int
+    user: Optional[UserOut] = None
+    action: str
+    entity_type: str
+    entity_id: int
+    details: Optional[str] = None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)

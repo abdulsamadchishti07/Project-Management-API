@@ -1,6 +1,5 @@
 from .database import Base
 from sqlalchemy import Integer, Column, String, Boolean, text, ForeignKey, UniqueConstraint
-
 from sqlalchemy.sql.sqltypes import TIMESTAMP
 from sqlalchemy.orm import relationship
 
@@ -24,6 +23,8 @@ class Workspace(Base):
     id = Column(Integer, primary_key=True, nullable=False)
     name = Column(String, nullable=False)
     active = Column(Boolean, server_default="True", nullable=False)
+    is_deleted = Column(Boolean, server_default="false", nullable=False)
+    deleted_at = Column(TIMESTAMP(timezone=True), nullable=True)
     created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text("now()"))
 
     owner_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
@@ -55,6 +56,7 @@ class WorkspaceInvitation(Base):
     status = Column(String, nullable=False, server_default="pending")
     created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text("now()"))
 
+
 class Project(Base):
     __tablename__ = "projects"
 
@@ -63,6 +65,8 @@ class Project(Base):
     name = Column(String, nullable=False)
     description = Column(String, nullable=True)
     active = Column(Boolean, server_default="true", nullable=False)
+    is_deleted = Column(Boolean, server_default="false", nullable=False)
+    deleted_at = Column(TIMESTAMP(timezone=True), nullable=True)
     created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text("NOW()"))
     private = Column(Boolean, server_default="false", nullable=False)
 
@@ -82,6 +86,8 @@ class ProjectMember(Base):
     __table_args__ = (
         UniqueConstraint("user_id", "project_id", name="unique_project_member"),
     )
+
+
 class ProjectInvitation(Base):
     __tablename__ = "project_invitations"
 
@@ -93,6 +99,7 @@ class ProjectInvitation(Base):
     status = Column(String, nullable=False, server_default="pending")
     created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text("now()"))
 
+
 class Tasks(Base):
     __tablename__ = "tasks"
 
@@ -102,6 +109,8 @@ class Tasks(Base):
     description = Column(String, nullable=True)
     status = Column(String, server_default="pending", nullable=False)
     priority = Column(String, server_default="medium", nullable=False)
+    is_deleted = Column(Boolean, server_default="false", nullable=False)
+    deleted_at = Column(TIMESTAMP(timezone=True), nullable=True)
     assignee_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text("now()"))
     due_date = Column(TIMESTAMP(timezone=True), nullable=True)
@@ -119,3 +128,19 @@ class Comments(Base):
     created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text("now()"))
 
     user = relationship("Users")
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    id = Column(Integer, primary_key=True, nullable=False)
+    workspace_id = Column(Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    action = Column(String, nullable=False)  # e.g., "TASK_CREATED", "PROJECT_DELETED", "STATUS_UPDATED"
+    entity_type = Column(String, nullable=False)  # "workspace", "project", "task", "comment"
+    entity_id = Column(Integer, nullable=False)
+    details = Column(String, nullable=True)
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text("now()"))
+
+    user = relationship("Users")
+    workspace = relationship("Workspace")
