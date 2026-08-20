@@ -1,10 +1,11 @@
 from typing import Annotated
 from fastapi import Depends, status, HTTPException, APIRouter, Response
+from sqlalchemy.orm import Session
+from sqlalchemy import or_
 
 from .. import model, schema, oauth2
 from ..database import get_db
-
-from sqlalchemy.orm import Session
+from ..rbac import Role, RequireWorkspaceRole
 
 router = APIRouter(
     prefix="/workspace",
@@ -26,11 +27,11 @@ def create_workspace(
     db.commit()
     db.refresh(new_workspace)
 
-    # Automatically add the creator as an 'Admin' member
+    # Automatically add the creator as an 'Owner' member
     member = model.WorkspaceMember(
         user_id=current_user.id,
         workspace_id=new_workspace.id,
-        role="Admin"
+        role=Role.OWNER.value
     )
     db.add(member)
     db.commit()
@@ -38,41 +39,49 @@ def create_workspace(
     return new_workspace
 
 
-@router.get("/{id}", response_model=schema.WorkspaceOut)
-def get_workspace(
-    id: int,
+@router.get("/", response_model=list[schema.WorkspaceOut])
+def get_my_workspaces(
     current_user: Annotated[model.Users, Depends(oauth2.get_current_active_user)],
     db: Session = Depends(get_db)
 ):
-    workspace = db.query(model.Workspace).filter(model.Workspace.id == id).first()
-    if workspace is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Workspace with id {id} not found"
+    """Retrieves all workspaces the current user owns or is a member of."""
+    member_workspace_ids = [
+        row[0] for row in db.query(model.WorkspaceMember.workspace_id).filter(
+            model.WorkspaceMember.user_id == current_user.id
+        ).all()
+    ]
+
+    workspaces = db.query(model.Workspace).filter(
+        or_(
+            model.Workspace.owner_id == current_user.id,
+            model.Workspace.id.in_(member_workspace_ids)
         )
+    ).all()
+
+    return workspaces
+
+
+@router.get("/{workspace_id}", response_model=schema.WorkspaceOut)
+def get_workspace(
+    workspace_id: int,
+    membership: Annotated[model.WorkspaceMember, Depends(RequireWorkspaceRole(Role.VIEWER))],
+    db: Session = Depends(get_db)
+):
+    """Requires at least VIEWER role in the workspace."""
+    workspace = db.query(model.Workspace).filter(model.Workspace.id == workspace_id).first()
     return workspace
 
 
-@router.put("/{id}", response_model=schema.WorkspaceOut)
+@router.put("/{workspace_id}", response_model=schema.WorkspaceOut)
 def update_workspace(
-    id: int,
+    workspace_id: int,
     workspace_data: schema.WorkspaceCreate,
-    current_user: Annotated[model.Users, Depends(oauth2.get_current_active_user)],
+    membership: Annotated[model.WorkspaceMember, Depends(RequireWorkspaceRole(Role.ADMIN))],
     db: Session = Depends(get_db)
 ):
-    workspace_query = db.query(model.Workspace).filter(model.Workspace.id == id)
+    """Requires at least ADMIN or OWNER role in the workspace."""
+    workspace_query = db.query(model.Workspace).filter(model.Workspace.id == workspace_id)
     workspace = workspace_query.first()
-
-    if workspace is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Workspace with id {id} not found"
-        )
-    if workspace.owner_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You are not allowed to perform this action"
-        )
 
     workspace_query.update(workspace_data.model_dump(), synchronize_session=False)
     db.commit()
@@ -81,24 +90,14 @@ def update_workspace(
     return workspace
 
 
-@router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{workspace_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_workspace(
-    id: int,
-    current_user: Annotated[model.Users, Depends(oauth2.get_current_active_user)],
+    workspace_id: int,
+    membership: Annotated[model.WorkspaceMember, Depends(RequireWorkspaceRole(Role.OWNER))],
     db: Session = Depends(get_db)
 ):
-    workspace = db.query(model.Workspace).filter(model.Workspace.id == id).first()
-
-    if workspace is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Workspace with id {id} not found"
-        )
-    if workspace.owner_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You are not allowed to perform this action"
-        )
+    """Requires OWNER role to delete the workspace."""
+    workspace = db.query(model.Workspace).filter(model.Workspace.id == workspace_id).first()
 
     db.delete(workspace)
     db.commit()

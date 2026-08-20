@@ -4,8 +4,7 @@ from sqlalchemy.orm import Session
 
 from .. import schema, model, oauth2, email
 from ..database import get_db
-
-from .project import verify_workspace_membership
+from ..rbac import Role, RequireWorkspaceRole
 from .tasks import verify_project_access
 
 router = APIRouter(
@@ -20,24 +19,11 @@ def invite_to_workspace(
     invitation_data: schema.WorkspaceInvitationCreate,
     background_tasks: BackgroundTasks,
     current_user: Annotated[model.Users, Depends(oauth2.get_current_active_user)],
+    membership: Annotated[model.WorkspaceMember, Depends(RequireWorkspaceRole(Role.ADMIN))],
     db: Session = Depends(get_db)
 ):
-    workspace = verify_workspace_membership(workspace_id=workspace_id, user_id=current_user.id, db=db)
-
-    # Check if sender is an Admin or Owner of the workspace
-    membership = db.query(model.WorkspaceMember).filter(
-        model.WorkspaceMember.workspace_id == workspace_id,
-        model.WorkspaceMember.user_id == current_user.id
-    ).first()
-
-    is_admin = membership and membership.role.lower() in ["admin", "owner"]
-    is_owner = workspace.owner_id == current_user.id
-
-    if not is_admin and not is_owner:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only workspace admins or owners can invite new members"
-        )
+    """Requires at least ADMIN or OWNER role in the workspace to send invites."""
+    workspace = db.query(model.Workspace).filter(model.Workspace.id == workspace_id).first()
 
     # Check if invited user is already a member
     invited_user = db.query(model.Users).filter(model.Users.email == invitation_data.email).first()
