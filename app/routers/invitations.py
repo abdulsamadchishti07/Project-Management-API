@@ -165,7 +165,7 @@ def invite_to_project(
     current_user: Annotated[model.Users, Depends(oauth2.get_current_active_user)],
     db: Session = Depends(get_db)
 ):
-    project = verify_project_access(project_id=project_id, user_id=current_user.id, db=db)
+    project = verify_project_access(project_id=project_id, user_id=current_user.id, db=db, min_role=Role.ADMIN)
 
     # Check if target user is in the parent workspace first
     target_user = db.query(model.Users).filter(model.Users.email == invitation_data.email).first()

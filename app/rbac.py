@@ -81,6 +81,12 @@ class RequireWorkspaceRole:
         # If user is the creator/owner of the workspace, grant OWNER authority
         if workspace.owner_id == current_user.id:
             user_role = Role.OWNER
+            if not member:
+                member = model.WorkspaceMember(
+                    user_id=current_user.id,
+                    workspace_id=workspace_id,
+                    role=Role.OWNER.value
+                )
         elif member:
             user_role = member.role
         else:

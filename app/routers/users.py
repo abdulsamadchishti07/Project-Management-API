@@ -76,11 +76,15 @@ def verify_otp(
             detail="Invalid verification code."
         )
 
-    if user.otp_expires_at and datetime.now(timezone.utc) > user.otp_expires_at:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Verification code has expired. Please request a new one."
-        )
+    if user.otp_expires_at:
+        expires_at = user.otp_expires_at
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        if datetime.now(timezone.utc) > expires_at:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Verification code has expired. Please request a new one."
+            )
 
     user.active = True
     user.verification_otp = None
@@ -143,12 +147,45 @@ def get_user(
     current_user: Annotated[model.Users, Depends(oauth2.get_current_active_user)],
     db: Session = Depends(get_db)
 ):
+    """
+    Retrieves user profile. 
+    Users can view their own profile or teammate profiles from shared workspaces.
+    """
     user = db.query(model.Users).filter(model.Users.id == id).first()
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail= f"User with this id {id} does not exist"
+            detail=f"User with id {id} does not exist"
         )
+
+    # Self lookup is always allowed
+    if id == current_user.id:
+        return user
+
+    # Check if current user and target user share any workspace
+    my_ws_ids = {
+        w.id for w in db.query(model.Workspace.id).filter(
+            (model.Workspace.owner_id == current_user.id) |
+            (model.Workspace.id.in_(
+                db.query(model.WorkspaceMember.workspace_id).filter(model.WorkspaceMember.user_id == current_user.id)
+            ))
+        ).filter(model.Workspace.is_deleted == False).all()
+    }
+
+    target_shares_ws = db.query(model.Workspace).filter(
+        model.Workspace.id.in_(my_ws_ids),
+        (model.Workspace.owner_id == id) |
+        (model.Workspace.id.in_(
+            db.query(model.WorkspaceMember.workspace_id).filter(model.WorkspaceMember.user_id == id)
+        ))
+    ).first()
+
+    if not target_shares_ws:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only view profiles of users you share a workspace with."
+        )
+
     return user
 
 

@@ -6,8 +6,8 @@ from sqlalchemy.orm import Session
 
 from .. import schema, model, oauth2
 from ..database import get_db
-
 from ..audit import log_activity
+from ..rbac import Role, has_sufficient_role
 
 router = APIRouter(
     prefix="/tasks",
@@ -18,8 +18,10 @@ router = APIRouter(
 def verify_project_access(
     project_id: int,
     user_id: int, 
-    db: Session
+    db: Session,
+    min_role: Role = Role.VIEWER
 ) -> model.Project:
+    """Verifies that the project exists, user has access, and meets the minimum required role rank."""
     project = db.query(model.Project).filter(
         model.Project.id == project_id,
         model.Project.is_deleted == False
@@ -31,7 +33,7 @@ def verify_project_access(
             detail=f"Project with id {project_id} not found"
         )
 
-    # Check workspace membership
+    # Check workspace existence
     workspace = db.query(model.Workspace).filter(
         model.Workspace.id == project.workspace_id,
         model.Workspace.is_deleted == False
@@ -43,29 +45,41 @@ def verify_project_access(
             detail="Parent workspace not found"
         )
 
-    is_ws_member = db.query(model.WorkspaceMember).filter(
-        model.WorkspaceMember.workspace_id == project.workspace_id,
-        model.WorkspaceMember.user_id == user_id
-    ).first()
+    # Determine user role in workspace
+    if workspace.owner_id == user_id:
+        user_role = Role.OWNER
+    else:
+        ws_member = db.query(model.WorkspaceMember).filter(
+            model.WorkspaceMember.workspace_id == project.workspace_id,
+            model.WorkspaceMember.user_id == user_id
+        ).first()
 
-    if not is_ws_member and workspace.owner_id != user_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You are not a member of the workspace this project belongs to"
-        )
+        if not ws_member:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You are not a member of the workspace this project belongs to"
+            )
+        user_role = ws_member.role
 
     # If project is private, check if user is the project owner or a project member
     if project.private:
-        is_project_member = db.query(model.ProjectMember).filter(
+        proj_member = db.query(model.ProjectMember).filter(
             model.ProjectMember.project_id == project.id,
             model.ProjectMember.user_id == user_id
         ).first()
 
-        if project.owner_id != user_id and not is_project_member and workspace.owner_id != user_id:
+        if project.owner_id != user_id and not proj_member and workspace.owner_id != user_id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You do not have access to this private project"
             )
+
+    # Enforce RBAC Role Hierarchy
+    if not has_sufficient_role(user_role, min_role):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Insufficient permissions. Minimum role required: {min_role.value.capitalize()}."
+        )
 
     return project
 
@@ -77,7 +91,8 @@ def create_task(
     current_user: Annotated[model.Users, Depends(oauth2.get_current_active_user)],
     db: Session = Depends(get_db)
 ):
-    project = verify_project_access(project_id=project_id, user_id=current_user.id, db=db)
+    """Requires at least MEMBER role to create a task."""
+    project = verify_project_access(project_id=project_id, user_id=current_user.id, db=db, min_role=Role.MEMBER)
 
     # If assignee is provided, check if that user exists
     if task.assignee_id is not None:
@@ -127,7 +142,8 @@ def get_project_tasks(
     limit: int = 50,
     offset: int = 0
 ):
-    verify_project_access(project_id=project_id, user_id=current_user.id, db=db)
+    """Requires at least VIEWER role to view project tasks."""
+    verify_project_access(project_id=project_id, user_id=current_user.id, db=db, min_role=Role.VIEWER)
 
     query = db.query(model.Tasks).filter(
         model.Tasks.project_id == project_id,
@@ -151,6 +167,7 @@ def get_task(
     current_user: Annotated[model.Users, Depends(oauth2.get_current_active_user)],
     db: Session = Depends(get_db)
 ):
+    """Requires at least VIEWER role to view task details."""
     task = db.query(model.Tasks).filter(
         model.Tasks.id == id,
         model.Tasks.is_deleted == False
@@ -162,7 +179,7 @@ def get_task(
             detail=f"Task with id {id} not found"
         )
 
-    verify_project_access(project_id=task.project_id, user_id=current_user.id, db=db)
+    verify_project_access(project_id=task.project_id, user_id=current_user.id, db=db, min_role=Role.VIEWER)
 
     return task
 
@@ -174,6 +191,7 @@ def update_task(
     current_user: Annotated[model.Users, Depends(oauth2.get_current_active_user)],
     db: Session = Depends(get_db)
 ):
+    """Requires at least MEMBER role to update a task."""
     task_query = db.query(model.Tasks).filter(
         model.Tasks.id == id,
         model.Tasks.is_deleted == False
@@ -186,7 +204,7 @@ def update_task(
             detail=f"Task with id {id} not found"
         )
 
-    project = verify_project_access(project_id=task.project_id, user_id=current_user.id, db=db)
+    project = verify_project_access(project_id=task.project_id, user_id=current_user.id, db=db, min_role=Role.MEMBER)
 
     update_data = task_data.model_dump(exclude_unset=True)
 
@@ -223,6 +241,7 @@ def delete_task(
     current_user: Annotated[model.Users, Depends(oauth2.get_current_active_user)],
     db: Session = Depends(get_db)
 ):
+    """Requires at least ADMIN role or project creator to soft delete a task."""
     task = db.query(model.Tasks).filter(
         model.Tasks.id == id,
         model.Tasks.is_deleted == False
@@ -234,7 +253,7 @@ def delete_task(
             detail=f"Task with id {id} not found"
         )
 
-    project = verify_project_access(project_id=task.project_id, user_id=current_user.id, db=db)
+    project = verify_project_access(project_id=task.project_id, user_id=current_user.id, db=db, min_role=Role.ADMIN)
 
     task_title = task.title
 

@@ -1,22 +1,22 @@
 # TaskFlow API
 
-A multi-tenant task/project management REST API built with FastAPI, 
+A multi-tenant task/project management REST API built with FastAPI,
 designed to practice production-level backend patterns.
 
 ## What it does
 
-Users can create workspaces, invite members with specific roles 
-(owner/admin/member/viewer), organize work into projects, and manage 
-tasks with assignees, statuses, priorities, and comments. Access to 
+Users can create workspaces, invite members with specific roles
+(owner/admin/member/viewer), organize work into projects, and manage
+tasks with assignees, statuses, priorities, and comments. Access to
 every resource is scoped to workspace membership and enforced by role.
 
 ## Why I built this
 
-After completing a tutorial-based social media API, I wanted to build 
-something from documentation alone — no walkthroughs — to prove I 
-actually understand the concepts rather than just following along. 
-This project intentionally covers what tutorials usually skip: 
-role-based access control, multi-tenant data isolation, background 
+After completing a tutorial-based social media API, I wanted to build
+something from documentation alone — no walkthroughs — to prove I
+actually understand the concepts rather than just following along.
+This project intentionally covers what tutorials usually skip:
+role-based access control, multi-tenant data isolation, background
 tasks, rate limiting, and caching.
 
 ## Tech stack
@@ -59,12 +59,14 @@ tasks, rate limiting, and caching.
 ### Option 2: Running Locally
 
 1. Create and activate a virtual environment:
+
    ```bash
    python3 -m venv .venv
    source .venv/bin/activate
    ```
 
 2. Install dependencies:
+
    ```bash
    pip install -r requirements.txt
    ```
@@ -72,6 +74,7 @@ tasks, rate limiting, and caching.
 3. Set up your `.env` file with your PostgreSQL and Gmail SMTP credentials.
 
 4. Run database migrations:
+
    ```bash
    alembic upgrade head
    ```

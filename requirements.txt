@@ -20,3 +20,7 @@ python-multipart==0.0.32
 # Utilities
 python-dotenv==1.2.2
 redis==8.1.0
+
+# Testing
+pytest==9.1.1
+httpx==0.28.1

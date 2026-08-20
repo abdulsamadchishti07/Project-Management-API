@@ -44,23 +44,26 @@ def set_cached_json(key: str, data: Any, expire_seconds: int = 180):
 
 
 def delete_cache_pattern(pattern: str):
-    """Invalidates all cache keys matching a pattern (e.g., 'projects:ws:1:*')."""
+    """
+    Non-blocking cache invalidation using SCAN instead of KEYS.
+    Safe for production on large Redis keyspaces.
+    """
     if not redis_client:
         return
     try:
-        keys = redis_client.keys(pattern)
-        if keys:
-            redis_client.delete(*keys)
+        cursor = "0"
+        while cursor != 0:
+            cursor, keys = redis_client.scan(cursor=cursor, match=pattern, count=100)
+            if keys:
+                redis_client.delete(*keys)
     except Exception as e:
         logger.warning(f"Redis cache invalidation error for '{pattern}': {e}")
 
 
 class RateLimiter:
     """
-    FastAPI Dependency for Rate Limiting based on Client IP address.
-
-    Usage:
-        @router.post("/login", dependencies=[Depends(RateLimiter(times=5, seconds=60))])
+    FastAPI Dependency for Rate Limiting.
+    Extracts client IP with X-Forwarded-For support for reverse proxies and Docker containers.
     """
 
     def __init__(self, times: int, seconds: int, key_prefix: str = "rate_limit"):
@@ -70,9 +73,17 @@ class RateLimiter:
 
     def __call__(self, request: Request):
         if not redis_client:
-            return  # If Redis is not running, allow request through gracefully
+            return  # Gracefully pass if Redis is offline
 
-        client_ip = request.client.host if request.client else "unknown"
+        # Support X-Forwarded-For behind reverse proxies / Docker load balancers
+        forwarded_for = request.headers.get("X-Forwarded-For")
+        if forwarded_for:
+            client_ip = forwarded_for.split(",")[0].strip()
+        elif request.client:
+            client_ip = request.client.host
+        else:
+            client_ip = "unknown"
+
         endpoint = request.url.path
         key = f"{self.key_prefix}:{endpoint}:{client_ip}"
 
