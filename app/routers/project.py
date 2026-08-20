@@ -1,11 +1,16 @@
-from typing import Annotated, Optional
 from fastapi import APIRouter, Depends, status, HTTPException, Response
+from typing import Annotated, Optional
+
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 
 from .. import schema, model, oauth2
 from ..database import get_db
+
 from ..rbac import Role, RequireWorkspaceRole, has_sufficient_role
+from ..redis_client import get_cached_json, set_cached_json, delete_cache_pattern
+
+
 
 router = APIRouter(
     prefix="/project",
@@ -43,6 +48,9 @@ def create_project(
     db.add(member)
     db.commit()
 
+    # Invalidate workspace projects cache
+    delete_cache_pattern(f"projects:ws:{workspace_id}:*")
+
     return new_project
 
 
@@ -53,7 +61,12 @@ def get_workspace_projects(
     membership: Annotated[model.WorkspaceMember, Depends(RequireWorkspaceRole(Role.VIEWER))],
     db: Session = Depends(get_db)
 ):
-    """Requires at least VIEWER role in the workspace. Returns accessible public & private projects."""
+    """Requires at least VIEWER role in the workspace. Cached in Redis for blazing performance."""
+    cache_key = f"projects:ws:{workspace_id}:user:{current_user.id}"
+    cached_data = get_cached_json(cache_key)
+    if cached_data is not None:
+        return cached_data
+
     # Fetch IDs of private projects where the current user is a member
     member_project_ids = [
         row[0] for row in db.query(model.ProjectMember.project_id).filter(
@@ -70,6 +83,10 @@ def get_workspace_projects(
             model.Project.id.in_(member_project_ids)
         )
     ).all()
+
+    # Serialize & store in Redis (3-minute TTL)
+    serialized = [schema.ProjectOut.model_validate(p).model_dump() for p in projects]
+    set_cached_json(cache_key, serialized, expire_seconds=180)
 
     return projects
 
@@ -156,6 +173,9 @@ def update_project(
         db.commit()
         db.refresh(project)
 
+        # Invalidate cache for this workspace
+        delete_cache_pattern(f"projects:ws:{project.workspace_id}:*")
+
     return project
 
 
@@ -190,7 +210,11 @@ def delete_project(
             detail="You are not allowed to delete this project"
         )
 
+    workspace_id = project.workspace_id
     db.delete(project)
     db.commit()
+
+    # Invalidate cache for this workspace
+    delete_cache_pattern(f"projects:ws:{workspace_id}:*")
 
     return Response(status_code=status.HTTP_204_NO_CONTENT)

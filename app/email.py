@@ -1,11 +1,13 @@
 import smtplib
 from email.mime.multipart import MIMEMultipart
+
 from email.mime.text import MIMEText
 import logging
 
 from .config import settings
 
 logger = logging.getLogger(__name__)
+
 
 
 def send_email(to_email: str, subject: str, html_content: str):

@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from . import model, oauth2
 from .database import get_db
+
 from typing import Annotated
 from enum import Enum
 

@@ -1,10 +1,12 @@
 from typing import Annotated
 from fastapi import APIRouter, Depends, status, HTTPException, Response, BackgroundTasks
-from sqlalchemy.orm import Session
 
+from sqlalchemy.orm import Session
 from .. import schema, model, oauth2, email
+
 from ..database import get_db
 from ..rbac import Role, RequireWorkspaceRole
+
 from .tasks import verify_project_access
 
 router = APIRouter(

@@ -19,3 +19,4 @@ python-multipart==0.0.32
 
 # Utilities
 python-dotenv==1.2.2
+redis==8.1.0

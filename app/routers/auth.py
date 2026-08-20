@@ -5,13 +5,26 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
 from .. import database, model, oauth2, schema, utils
+from ..redis_client import RateLimiter
 
 router = APIRouter(
     tags=["Authentication"]
 )
 
 
-@router.post("/login", response_model=schema.Token)
+@router.post(
+    "/login",
+    response_model=schema.Token, 
+    dependencies=[
+        Depends(
+            RateLimiter(
+                times=5, 
+                seconds=60, 
+                key_prefix="rate_login"
+            )
+        )
+    ]
+)
 def login(
     user_credential: Annotated[OAuth2PasswordRequestForm, Depends()],
     db: Session = Depends(database.get_db),

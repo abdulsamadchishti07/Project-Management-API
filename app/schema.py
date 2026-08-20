@@ -21,6 +21,7 @@ class UserCreate(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+    # OTP
 class VerifyOTP(BaseModel):
     email: EmailStr
     otp: str = Field(min_length=6, max_length=6, description="6-digit verification code")

@@ -8,6 +8,7 @@ from typing import Annotated
 from datetime import datetime, timedelta, timezone
 
 import random
+from ..redis_client import RateLimiter
 
 
 
@@ -89,7 +90,19 @@ def verify_otp(
     return {"message": "Email verified successfully! Your account is now active. You can log in."}
 
 
-@router.post("/resend-otp", response_model=schema.MessageResponse)
+@router.post(
+    "/resend-otp", 
+    response_model=schema.MessageResponse, 
+    dependencies=[
+        Depends(
+            RateLimiter(
+                times=3, 
+                seconds=300, 
+                key_prefix="rate_resend_otp"
+            )
+        )
+    ]
+)
 def resend_otp(
     payload: schema.ResendOTP,
     background_tasks: BackgroundTasks,
